@@ -3,11 +3,18 @@ $RuleName = 'Packet Tracer Offline Shield'
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Host 'Meminta hak Administrator (UAC), approve saja...' -ForegroundColor Yellow
-    Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @(
-        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $PSCommandPath)
-    ) -Wait
-    exit
+    if ($PSCommandPath) {
+        Write-Host 'Meminta hak Administrator (UAC), approve saja...' -ForegroundColor Yellow
+        Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $PSCommandPath)
+        ) -Wait
+        return
+    }
+    Write-Host ''
+    Write-Host 'GAGAL: harus dijalankan sebagai Administrator.' -ForegroundColor Red
+    Write-Host 'Klik kanan Start > Terminal (Admin), lalu ulangi.'
+    Write-Host ''
+    return
 }
 
 function Get-PacketTracerExe {
@@ -28,8 +35,7 @@ if (-not $mainExe) {
     Write-Host 'GAGAL: Packet Tracer tidak ditemukan.' -ForegroundColor Red
     Write-Host 'Pastikan Cisco Packet Tracer sudah terinstall di Program Files.'
     Write-Host ''
-    Read-Host 'Tekan Enter untuk menutup'
-    exit 1
+    return
 }
 
 $binDir = Split-Path -Parent $mainExe
@@ -52,8 +58,6 @@ Write-Host ''
 Write-Host 'Aturan yang dibuat:'
 foreach ($exe in $targets) { Write-Host ("  - " + $exe) }
 Write-Host ''
-Write-Host 'Cek status:'
-Write-Host ("  Get-NetFirewallRule -DisplayName '" + $RuleName + "'")
-Write-Host 'Kembalikan ke normal: .\Uninstall.ps1'
+Write-Host 'Kembalikan ke normal:'
+Write-Host "  irm https://raw.githubusercontent.com/nabilfp/PacketTracer-Offline/main/Uninstall.ps1 | iex"
 Write-Host ''
-Read-Host 'Tekan Enter untuk menutup'

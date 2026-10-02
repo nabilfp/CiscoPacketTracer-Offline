@@ -9,39 +9,23 @@ setting lain, dan bisa dikembalikan kapan saja.
 
 ---
 
-## What's inside
+## Cara 1: Satu Command (paling gampang)
 
-| File | Fungsi |
-| --- | --- |
-| `Install.ps1` | Mengaktifkan mode offline (butuh Administrator) |
-| `Uninstall.ps1` | Mengembalikan Packet Tracer ke online |
-
----
-
-## Cara 1: Instant (paling gampang)
-
-1. Klik kanan `Install.ps1` > **Run with PowerShell**
-2. Kalau muncul permintaan izin Administrator (UAC), pilih **Yes**
-3. Selesai
-
-Kalau klik kanan tidak muncul opsi Run with PowerShell, buka PowerShell,
-pindah ke folder ini, lalu jalankan:
+Buka **PowerShell sebagai Administrator**, lalu copy paste **satu baris** ini:
 
 ```powershell
-.\Install.ps1
+irm https://raw.githubusercontent.com/nabilfp/PacketTracer-Offline/main/Install.ps1 | iex
 ```
 
-Script akan otomatis minta izin Administrator sendiri, jadi approve saja
-jika UAC muncul.
+Selesai. Tidak perlu masuk folder, tidak perlu download file.
+
+Kalau muncul tulisan **BERHASIL: Packet Tracer sekarang OFFLINE**, beres.
 
 ---
 
 ## Cara 2: Manual
 
-Buka **PowerShell sebagai Administrator** (klik kanan Start > Terminal
-(Admin), atau Windows + X > Windows PowerShell (Admin)).
-
-Copy paste seluruh baris ini:
+Kalau mau tanpa download skrip sama sekali. Paste di PowerShell Administrator:
 
 ```powershell
 $exe = (Get-ChildItem "$env:ProgramFiles\Cisco Packet Tracer*" -Directory | Select-Object -First 1).FullName + '\bin\PacketTracer.exe'
@@ -50,8 +34,10 @@ New-NetFirewallRule -DisplayName 'Packet Tracer Offline Shield' -Direction Outbo
 New-NetFirewallRule -DisplayName 'Packet Tracer Offline Shield' -Direction Inbound  -Action Block -Program $exe -Profile Any
 ```
 
-Selesai. Kalau baris pertama error karena folder tidak ketemu, pakai path
-lengkap, contoh:
+Baris pertama mencari nama folder Packet Tracer secara otomatis, jadi aman
+untuk versi apa pun.
+
+Kalau baris pertama error, pakai path lengkap:
 
 ```powershell
 $exe = 'C:\Program Files\Cisco Packet Tracer 8.2.2\bin\PacketTracer.exe'
@@ -61,13 +47,17 @@ $exe = 'C:\Program Files\Cisco Packet Tracer 8.2.2\bin\PacketTracer.exe'
 
 ## Cara mengembalikan ke online
 
-Sama persis, PowerShell sebagai Administrator:
+PowerShell Administrator, satu baris:
+
+```powershell
+irm https://raw.githubusercontent.com/nabilfp/PacketTracer-Offline/main/Uninstall.ps1 | iex
+```
+
+Atau tanpa download skrip:
 
 ```powershell
 Get-NetFirewallRule -DisplayName 'Packet Tracer Offline Shield' | Remove-NetFirewallRule
 ```
-
-Atau jalankan `Uninstall.ps1`.
 
 ---
 
@@ -76,8 +66,7 @@ Atau jalankan `Uninstall.ps1`.
 PowerShell (Administrator tidak wajib):
 
 ```powershell
-Get-NetFirewallRule -DisplayName 'Packet Tracer Offline Shield' |
-    Select-Object Direction, Action, Enabled
+Get-NetFirewallRule -DisplayName 'Packet Tracer Offline Shield' | Select-Object Direction, Action
 ```
 
 Kalau ada baris `Outbound Block` dan `Inbound Block`, berarti sedang offline.
@@ -85,11 +74,20 @@ Kalau kosong, berarti sudah online.
 
 ---
 
+## Cara tanpa buka Administrator
+
+Kalau males buka Administrator, jalankan `Install.ps1` dengan klik kanan
+> Run with PowerShell, lalu approve permintaan UAC yang muncul.
+
+---
+
 ## Catatan
 
 - **Tutup Packet Tracer dulu** sebelum mengaktifkan. Aturan berlaku untuk
   koneksi baru.
-- Versi Packet Tracer tidak penting, script mencari folder
-  `Cisco Packet Tracer*` secara otomatis.
+- Aman dijalankan berulang kali, tidak akan membuat rule duplikat.
 - Tidak ada yang diubah di luar Packet Tracer. Browser, Wi-Fi, dan
   aplikasi lain tetap normal.
+- Installer Packet Tracer sendiri membuat aturan `Allow` untuk
+  Packet Tracer, tapi di Windows Firewall **Block menang atas Allow**,
+  jadi aturan di repo ini tetap efektif.
