@@ -21,7 +21,7 @@ irm https://raw.githubusercontent.com/nabilfp/PacketTracer-Offline/main/Install.
 
 Selesai. Tidak perlu masuk folder, tidak perlu download file.
 
-Kalau muncul tulisan **BERHASIL: Packet Tracer sekarang OFFLINE**, beres.
+Kalau muncul tulisan **SUCCESS: Packet Tracer is now OFFLINE**, beres.
 
 Skrip otomatis mencari Cisco Packet Tracer di **semua drive** (bukan cuma
 C:). Dicek lewat registry dan isi tiap drive, jadi tetap jalan walau

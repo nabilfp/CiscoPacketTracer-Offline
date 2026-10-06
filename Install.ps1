@@ -1,18 +1,19 @@
 $ErrorActionPreference = 'Stop'
 $RuleName = 'Packet Tracer Offline Shield'
+$script:Diag = New-Object System.Collections.Generic.List[string]
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     if ($PSCommandPath) {
-        Write-Host 'Meminta hak Administrator (UAC), approve saja...' -ForegroundColor Yellow
+        Write-Host 'Requesting Administrator rights (UAC), please approve...' -ForegroundColor Yellow
         Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @(
             '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $PSCommandPath)
         ) -Wait
         return
     }
     Write-Host ''
-    Write-Host 'GAGAL: harus dijalankan sebagai Administrator.' -ForegroundColor Red
-    Write-Host 'Klik kanan Start > Terminal (Admin), lalu ulangi.'
+    Write-Host 'FAILED: must be run as Administrator.' -ForegroundColor Red
+    Write-Host 'Right-click Start > Terminal (Admin), then try again.'
     Write-Host ''
     return
 }
@@ -39,7 +40,9 @@ function Get-DriveRoots {
             $root = $drive.RootDirectory.FullName
             if ($root) { $roots += $root }
         }
-    } catch { }
+    } catch {
+        $script:Diag.Add('Unable to enumerate drives: ' + $_.Exception.Message)
+    }
     if ($roots.Count -eq 0) { $roots = @("$env:SystemDrive\") }
     return @($roots | Select-Object -Unique)
 }
@@ -80,6 +83,7 @@ function Find-PacketTracerInRegistry {
                     if ($exe) { return $exe }
                 }
             }
+            $script:Diag.Add("Found 'Packet Tracer' in the uninstall registry, but the stored install path is missing or invalid.")
         }
     }
     return $null
@@ -94,6 +98,7 @@ function Find-PacketTracerInFolder {
     foreach ($dir in $dirs) {
         $exe = Test-PacketTracerFolder $dir.FullName
         if ($exe) { return $exe }
+        $script:Diag.Add("A 'Cisco Packet Tracer*' folder was found at $($dir.FullName) but PacketTracer.exe (or bin\PacketTracer.exe / bin\PacketTracer64.exe) is missing inside.")
     }
     return $null
 }
@@ -114,6 +119,7 @@ function Find-PacketTracerByScanning {
     foreach ($top in $topDirs) {
         $exe = Test-PacketTracerFolder $top.FullName
         if ($exe) { return $exe }
+        $script:Diag.Add("A 'Cisco Packet Tracer*' folder was found at $($top.FullName) but PacketTracer.exe (or bin\PacketTracer.exe / bin\PacketTracer64.exe) is missing inside.")
 
         $dirs = @()
         try {
@@ -123,6 +129,7 @@ function Find-PacketTracerByScanning {
         foreach ($dir in ($dirs | Sort-Object { $_.FullName.Length })) {
             $exe = Test-PacketTracerFolder $dir.FullName
             if ($exe) { return $exe }
+            $script:Diag.Add("A 'Cisco Packet Tracer*' folder was found at $($dir.FullName) but PacketTracer.exe (or bin\PacketTracer.exe / bin\PacketTracer64.exe) is missing inside.")
         }
     }
     return $null
@@ -131,49 +138,61 @@ function Find-PacketTracerByScanning {
 function Get-PacketTracerExe {
     if ($env:PacketTracerExe) {
         $path = ([string]$env:PacketTracerExe).Trim().Trim('"')
-        if (Test-Path -LiteralPath $path -PathType Leaf -ErrorAction SilentlyContinue) { return $path }
+        if (Test-Path -LiteralPath $path -PathType Leaf -ErrorAction SilentlyContinue) { return @{Found = $true; Path = $path} }
         $fromFolder = Test-PacketTracerFolder $path
-        if ($fromFolder) { return $fromFolder }
-        Write-Host ("PERINGATAN: isi variabel PacketTracerExe tidak valid: " + $path) -ForegroundColor Yellow
+        if ($fromFolder) { return @{Found = $true; Path = $fromFolder} }
+        Write-Host ("WARNING: PacketTracerExe variable value is not valid: " + $path) -ForegroundColor Yellow
     }
 
     $roots = Get-DriveRoots
-    Write-Host ("Mencari Cisco Packet Tracer di semua drive: " + ($roots -join ' ')) -ForegroundColor DarkGray
+    if (-not $roots) {
+        return @{Found = $false; Hint = 'No readable drive was found to search.'}
+    }
+    Write-Host ("Searching for Cisco Packet Tracer on all drives: " + ($roots -join ' ')) -ForegroundColor DarkGray
 
     $found = Find-PacketTracerInRegistry
-    if ($found) { return $found }
+    if ($found) { return @{Found = $true; Path = $found} }
 
     foreach ($root in $roots) {
         foreach ($pf in @('Program Files', 'Program Files (x86)')) {
             $found = Find-PacketTracerInFolder (Join-Path $root $pf)
-            if ($found) { return $found }
+            if ($found) { return @{Found = $true; Path = $found} }
         }
         $found = Find-PacketTracerInFolder $root
-        if ($found) { return $found }
+        if ($found) { return @{Found = $true; Path = $found} }
     }
 
     foreach ($root in $roots) {
-        Write-Host ("  Menelusuri isi " + $root + " (mungkin butuh beberapa detik)...") -ForegroundColor DarkGray
+        Write-Host ("  Scanning contents of " + $root + " (may take a few seconds)...") -ForegroundColor DarkGray
         $found = Find-PacketTracerByScanning -Root $root
-        if ($found) { return $found }
+        if ($found) { return @{Found = $true; Path = $found} }
     }
 
-    return $null
+    return @{Found = $false; Hint = "No folder named 'Cisco Packet Tracer*' containing PacketTracer.exe was found on any drive."}
 }
 
-$mainExe = Get-PacketTracerExe
-if (-not $mainExe) {
+$result = Get-PacketTracerExe
+if (-not $result.Found) {
     Write-Host ''
-    Write-Host 'GAGAL: Packet Tracer tidak ditemukan di drive mana pun.' -ForegroundColor Red
-    Write-Host 'Semua drive sudah dijelajahi, tapi folder Cisco Packet Tracer tidak ada.'
+    Write-Host 'FAILED: Packet Tracer was not found on any drive.' -ForegroundColor Red
     Write-Host ''
-    Write-Host 'Kalau lokasinya tidak biasa, tunjuk path-nya lalu ulangi:'
-    Write-Host "  `$env:PacketTracerExe = 'D:\jalur\ke\bin\PacketTracer.exe'" -ForegroundColor Yellow
+    Write-Host 'Reason:' -ForegroundColor Yellow
+    Write-Host ("  - " + $result.Hint)
+    $script:Diag | Select-Object -Unique | ForEach-Object { Write-Host ("  - " + $_) }
+    Write-Host ''
+    Write-Host 'Possible causes:' -ForegroundColor Yellow
+    Write-Host '  - Cisco Packet Tracer is not installed.'
+    Write-Host '  - It is installed deeper than 5 levels below the drive root.'
+    Write-Host '  - The Packet Tracer folder exists but the PacketTracer.exe file is missing or blocked.'
+    Write-Host ''
+    Write-Host 'To force a path, set it and run again:'
+    Write-Host "  `$env:PacketTracerExe = 'D:\path\to\bin\PacketTracer.exe'" -ForegroundColor Yellow
     Write-Host '  irm https://raw.githubusercontent.com/nabilfp/PacketTracer-Offline/main/Install.ps1 | iex'
     Write-Host ''
     return
 }
 
+$mainExe = $result.Path
 $binDir = Split-Path -Parent $mainExe
 $targets = @($mainExe, (Join-Path $binDir 'QtWebEngineProcess.exe')) |
     Where-Object { Test-Path -LiteralPath $_ }
@@ -188,12 +207,12 @@ foreach ($exe in $targets) {
 }
 
 Write-Host ''
-Write-Host 'BERHASIL: Packet Tracer sekarang OFFLINE.' -ForegroundColor Green
-Write-Host 'Internet browser dan aplikasi lain TIDAK terganggu.'
+Write-Host 'SUCCESS: Packet Tracer is now OFFLINE.' -ForegroundColor Green
+Write-Host 'Your browser and other apps are NOT affected.'
 Write-Host ''
-Write-Host 'Aturan yang dibuat:'
+Write-Host 'Rules created:'
 foreach ($exe in $targets) { Write-Host ("  - " + $exe) }
 Write-Host ''
-Write-Host 'Kembalikan ke normal:'
+Write-Host 'To restore internet access:'
 Write-Host "  irm https://raw.githubusercontent.com/nabilfp/PacketTracer-Offline/main/Uninstall.ps1 | iex"
 Write-Host ''

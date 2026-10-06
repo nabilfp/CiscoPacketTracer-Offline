@@ -21,7 +21,7 @@ irm https://raw.githubusercontent.com/nabilfp/PacketTracer-Offline/main/Install.
 
 Done. No need to browse into a folder, no need to download anything.
 
-If you see **BERHASIL: Packet Tracer sekarang OFFLINE**, you are all set.
+If you see **SUCCESS: Packet Tracer is now OFFLINE**, you are all set.
 
 The script automatically searches for Cisco Packet Tracer on **all drives**
 (not only C:), checking the registry and scanning every fixed drive, so it
